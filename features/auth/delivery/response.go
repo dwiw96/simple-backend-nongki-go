@@ -10,9 +10,10 @@ type signupResponse struct {
 	MaritalStatus string `json:"marital_status"`
 }
 
-func toSignUpResponse(input auth.User) signupResponse {
+func toSignUpResponse(input *auth.User) signupResponse {
 	return signupResponse{
 		FullName:      input.FirstName + input.MiddleName + input.LastName,
+		Email:         input.Email,
 		Address:       input.Address,
 		Gender:        input.Gender,
 		MaritalStatus: input.MaritalStatus,

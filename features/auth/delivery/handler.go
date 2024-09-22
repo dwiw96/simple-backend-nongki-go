@@ -7,22 +7,45 @@ import (
 	auth "simple-backend-nongki-go/features/auth"
 	responses "simple-backend-nongki-go/utils/responses"
 
+	"github.com/go-playground/locales/en"
+	ut "github.com/go-playground/universal-translator"
+	"github.com/go-playground/validator/v10"
+	en_translations "github.com/go-playground/validator/v10/translations/en"
 	"github.com/julienschmidt/httprouter"
 )
 
 type authDelivery struct {
-	router  *httprouter.Router
-	service auth.ServiceInterface
+	router   *httprouter.Router
+	service  auth.ServiceInterface
+	validate *validator.Validate
+	trans    ut.Translator
 }
 
-func NewAuthDelivery(router *httprouter.Router, serive auth.ServiceInterface) {
+func NewAuthDelivery(router *httprouter.Router, service auth.ServiceInterface) {
 	handler := &authDelivery{
-		router:  router,
-		service: serive,
+		router:   router,
+		service:  service,
+		validate: validator.New(),
 	}
 
+	en := en.New()
+	uni := ut.New(en, en)
+	trans, _ := uni.GetTranslator("en")
+	en_translations.RegisterDefaultTranslations(handler.validate, trans)
+	handler.trans = trans
+
 	router.POST("/api/signup", handler.SignUp)
-	router.POST("/api/signin", handler.SignIn)
+	router.POST("/api/login", handler.LogIn)
+}
+
+func translateError(trans ut.Translator, err error) (errTrans []string) {
+	errs := err.(validator.ValidationErrors)
+	a := (errs.Translate(trans))
+	for _, val := range a {
+		errTrans = append(errTrans, val)
+	}
+
+	return
 }
 
 func (d *authDelivery) SignUp(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -31,38 +54,49 @@ func (d *authDelivery) SignUp(w http.ResponseWriter, r *http.Request, _ httprout
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		responses.ErrorJSON(w, http.StatusUnprocessableEntity, err.Error(), r.RemoteAddr)
+		return
+	}
+
+	err = d.validate.Struct(request)
+	if err != nil {
+		errTranslated := translateError(d.trans, err)
+		responses.ErrorJSON(w, 422, errTranslated, r.RemoteAddr)
+		return
 	}
 
 	signupInput := toSignUpRequest(request)
 	user, code, err := d.service.SignUp(signupInput)
 	if err != nil {
 		responses.ErrorJSON(w, code, err.Error(), r.RemoteAddr)
+		return
 	}
 
-	response := toSignUpResponse(*user)
+	response := toSignUpResponse(user)
 
 	w.Header().Add("Content-Type", "application/json")
-	w.WriteHeader(200)
-	responses.SuccessWithDataResponse(response, "signup success")
+	w.WriteHeader(201)
+	json.NewEncoder(w).Encode(responses.SuccessWithDataResponse(response, 201, "SignUp success"))
 }
 
-func (d *authDelivery) SignIn(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (d *authDelivery) LogIn(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	var request signinRequest
 
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		responses.ErrorJSON(w, http.StatusUnprocessableEntity, err.Error(), r.RemoteAddr)
+		return
 	}
 
 	user, token, code, err := d.service.SignIn(auth.SigninRequest(request))
 	if err != nil {
 		responses.ErrorJSON(w, code, err.Error(), r.RemoteAddr)
+		return
 	}
 
-	response := toSignUpResponse(*user)
+	response := toSignUpResponse(user)
 
 	w.Header().Set("Authorization", token)
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(200)
-	responses.SuccessWithDataResponse(response, "signup success")
+	json.NewEncoder(w).Encode(responses.SuccessWithDataResponse(response, 200, "LogIn success"))
 }

@@ -5,14 +5,14 @@ import (
 )
 
 type signupRequest struct {
-	FirstName     string `json:"first_name"`
+	FirstName     string `json:"first_name" validate:"required,min=2"`
 	MiddleName    string `json:"middle_name"`
-	LastName      string `json:"last_name"`
-	Email         string `json:"email"`
-	Address       string `json:"address"`
-	Gender        string `json:"gender"`
-	MaritalStatus string `json:"marital_status"`
-	Password      string `json:"password"`
+	LastName      string `json:"last_name" validate:"required,min=2"`
+	Email         string `json:"email" validate:"email"`
+	Address       string `json:"address" validate:"required,min=2"`
+	Gender        string `json:"gender" validate:"required,oneof=male female"`
+	MaritalStatus string `json:"marital_status" validate:"required,oneof=single married divorced"`
+	Password      string `json:"password" validate:"min=7,required_with=alphanum"`
 }
 
 func toSignUpRequest(input signupRequest) auth.SignupRequest {

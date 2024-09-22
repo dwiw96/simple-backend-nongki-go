@@ -126,8 +126,7 @@ func TestCheckEmail(t *testing.T) {
 			if test.name == "error_typo_email" {
 				test.email = account.Email + "m"
 			}
-			res, err := repoTest.ReadUser(test.email)
-			require.Error(t, err)
+			res, _ := repoTest.CheckEmail(test.email)
 			require.Zero(t, res)
 		})
 	}
@@ -257,4 +256,10 @@ func TestInsertUser(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadKey(t *testing.T) {
+	res, err := repoTest.LoadKey()
+	require.NoError(t, err)
+	require.NotNil(t, res)
 }

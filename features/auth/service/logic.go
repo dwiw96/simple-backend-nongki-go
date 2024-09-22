@@ -26,7 +26,7 @@ func (s *authService) SignUp(input auth.SignupRequest) (user *auth.User, code in
 	}
 
 	if resCheckEmail != 0 {
-		return nil, 409, err
+		return nil, 409, fmt.Errorf("email is registered")
 	}
 
 	// hashing password
@@ -38,7 +38,7 @@ func (s *authService) SignUp(input auth.SignupRequest) (user *auth.User, code in
 	// insert new user
 	user, err = s.repo.InsertUser(input)
 	if err != nil {
-		return nil, 500, err
+		return nil, 400, err
 	}
 
 	return user, 0, nil
@@ -46,6 +46,9 @@ func (s *authService) SignUp(input auth.SignupRequest) (user *auth.User, code in
 
 func (s *authService) SignIn(input auth.SigninRequest) (user *auth.User, token string, code int, err error) {
 	user, err = s.repo.ReadUser(input.Email)
+	if err != nil {
+		return nil, "", 400, err
+	}
 
 	err = password.VerifyHashPassword(input.Password, user.HashedPassword)
 	if err != nil {
