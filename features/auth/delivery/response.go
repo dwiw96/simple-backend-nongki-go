@@ -12,7 +12,7 @@ type signupResponse struct {
 
 func toSignUpResponse(input *auth.User) signupResponse {
 	return signupResponse{
-		FullName:      input.FirstName + input.MiddleName + input.LastName,
+		FullName:      input.Fullname,
 		Email:         input.Email,
 		Address:       input.Address,
 		Gender:        input.Gender,
