@@ -1,17 +1,17 @@
 package middleware
 
 import (
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -19,7 +19,58 @@ import (
 
 	auth "simple-backend-nongki-go/features/auth"
 	// "github.com/julienschmidt/httprouter"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func GetToken(reqData auth.User, key *rsa.PrivateKey) (token string, err error) {
+	nowTime := time.Now().UTC()
+	expTime := nowTime.Add(time.Hour * 1)
+
+	t := jwt.NewWithClaims(jwt.SigningMethodRS256,
+		jwt.MapClaims{
+			"iss":     "nongki",
+			"userID":  reqData.ID,
+			"name":    reqData.Fullname,
+			"email":   reqData.Email,
+			"address": reqData.Address,
+			"iat":     nowTime.Unix(),
+			"exp":     expTime.Unix(),
+		})
+
+	token, err = t.SignedString(key)
+
+	return
+}
+
+func VerifyToken(userToken string, key *rsa.PrivateKey) (bool, error) {
+	jwtToken, err := jwt.Parse(userToken, func(jwtToken *jwt.Token) (interface{}, error) {
+		if _, ok := jwtToken.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", jwtToken.Header["alg"])
+		}
+
+		return &key.PublicKey, nil
+	})
+
+	if err != nil {
+		log.Println("err:", err)
+		return false, err
+	}
+
+	if claims, ok := jwtToken.Claims.(jwt.MapClaims); ok {
+		if claims["iss"] != "nongki" {
+			errMsg := fmt.Errorf("claim iss is wrong")
+			log.Println(errMsg)
+			return false, errMsg
+		}
+	} else {
+		errMsg := fmt.Errorf("iss payload not found")
+		log.Println(errMsg)
+		return false, errMsg
+	}
+
+	return true, nil
+}
 
 type KeyCache struct {
 	key        *rsa.PrivateKey
@@ -67,14 +118,14 @@ var keyCache = &KeyCache{
 // 	})
 // }
 
-func LoadKey(db *sql.DB) (key *rsa.PrivateKey, err error) {
+func LoadKey(ctx context.Context, conn *pgxpool.Pool) (key *rsa.PrivateKey, err error) {
 	if keyCache.key != nil && time.Now().Before(keyCache.expiration) {
 		return keyCache.key, nil
 	}
 
 	query := "select private_key from sec_m"
 	var keyBytes []byte
-	rows, err := db.Query(query)
+	rows, err := conn.Query(ctx, query)
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -142,45 +193,11 @@ func LoadKey(db *sql.DB) (key *rsa.PrivateKey, err error) {
 // 	return tokenData, "", nil
 // }
 
-func GetSignedToken(reqData auth.User, key *rsa.PrivateKey) string {
-	privateKey := key
-	header := auth.JwtHeader{"RS256", "JWT"}
-	nowTime := time.Now().UTC().Add(time.Hour * 9).Add(time.Minute * 60)
-	payload := auth.JwtPayload{
-		UserID:  reqData.ID,
-		Name:    reqData.FirstName + reqData.MiddleName + reqData.LastName,
-		Email:   reqData.Email,
-		Address: reqData.Address,
-		Iat:     nowTime,
-		Exp:     nowTime,
-	}
-	headerBytes, err := json.Marshal(header)
-	payloadBytes, err := json.Marshal(payload)
-	encodedHeader := base64.URLEncoding.EncodeToString(headerBytes)
-	encodedPayload := base64.URLEncoding.EncodeToString(payloadBytes)
-	headPay := encodedHeader + "." + encodedPayload
-	msgHash := sha256.New()
-	_, err = msgHash.Write([]byte(headPay))
-	if err != nil {
-		log.Println(err)
-		//panic(err)
-	}
-	msgHashSum := msgHash.Sum(nil)
-	signature, err := rsa.SignPSS(rand.Reader, privateKey, crypto.SHA256, msgHashSum, nil)
-	if err != nil {
-		log.Println(err)
-		//panic(err)
-	}
-	encodedSignature := base64.URLEncoding.EncodeToString(signature)
-	token := "Bearer " + headPay + "." + encodedSignature
-	return token
-}
-
 func GetUpdatedToken(payload auth.JwtPayload, key *rsa.PrivateKey) string {
 	privateKey := key
-	header := auth.JwtHeader{"RS256", "JWT"}
-	nowTime := time.Now().UTC().Add(time.Hour * 9)
-	payload.Exp = nowTime.Add(time.Minute * 15)
+	header := auth.JwtHeader{Alg: "RS256", Typ: "JWT"}
+	nowTime := time.Now().UTC()
+	payload.Exp = nowTime.Add(time.Minute * 60)
 	headerBytes, err := json.Marshal(header)
 	payloadBytes, err := json.Marshal(payload)
 	encodedHeader := base64.URLEncoding.EncodeToString(headerBytes)
@@ -199,69 +216,4 @@ func GetUpdatedToken(payload auth.JwtPayload, key *rsa.PrivateKey) string {
 	encodedSignature := base64.URLEncoding.EncodeToString(signature)
 	token := "Bearer " + headPay + "." + encodedSignature
 	return token
-}
-
-func Verify(token string, key *rsa.PrivateKey) bool {
-	if len(token) < 20 {
-		return false
-	}
-	spaceLastIndex := strings.LastIndex(token, " ")
-	if len(token) < spaceLastIndex+2 {
-
-	} else {
-		token = token[spaceLastIndex+1:]
-	}
-
-	lastCommaIndex := strings.LastIndex(token, ".")
-	if len(token) < lastCommaIndex+2 {
-		return false
-	}
-
-	signature := token[lastCommaIndex+1:]
-	verifyPart := token[:lastCommaIndex]
-
-	decodedSignature, err := base64.URLEncoding.DecodeString(signature)
-	if err != nil {
-		log.Println("could not decode signature: ", err)
-		return false
-	}
-
-	// Verify the signature using the same algorithm and method as used in the GetUpdatedToken function
-	hash := sha256.New()
-	hash.Write([]byte(verifyPart))
-	hashed := hash.Sum(nil)
-	opts := rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthAuto, Hash: crypto.SHA256}
-	err = rsa.VerifyPSS(&key.PublicKey, crypto.SHA256, hashed, decodedSignature, &opts)
-	if err != nil {
-		log.Println("could not verify signature: ", err)
-		return false
-	}
-
-	log.Println("signature verified")
-	return true
-}
-
-func VerifyExpired() bool {
-
-	return true
-}
-
-func ReadToken(token string) auth.JwtPayload {
-	payloadModel := &auth.JwtPayload{}
-	tokenArr := strings.Split(token, ".")
-	if len(tokenArr) != 3 {
-		log.Println("token token!")
-		return *payloadModel
-	}
-	payload := tokenArr[1]
-
-	payloadBytes, err := base64.URLEncoding.DecodeString(payload)
-
-	if err != nil {
-		log.Println(err)
-	}
-
-	json.Unmarshal(payloadBytes, payloadModel)
-
-	return *payloadModel
 }
