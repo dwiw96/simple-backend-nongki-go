@@ -18,6 +18,7 @@ type SignupRequest struct {
 
 type User struct {
 	ID             int64
+	Fullname       string
 	FirstName      string `json:"first_name"`
 	MiddleName     string `json:"middle_name"`
 	LastName       string `json:"last_name"`
@@ -41,6 +42,7 @@ type JwtHeader struct {
 
 type JwtPayload struct {
 	UserID  int64     `json:"usi"`
+	Iss     string    `json:"iss"`
 	Name    string    `json:"nam"`
 	Email   string    `json:"eml"`
 	Address string    `json:"adr,omitempty"`

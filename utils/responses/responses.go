@@ -11,6 +11,8 @@ var errorMsg = map[int]string{
 	422: "Unprocessable Entity",
 	409: "Conflict",
 	500: "Internal Server Error",
+	400: "Bad Request",
+	401: "Unauthorized",
 }
 
 func ErrorJSON(w http.ResponseWriter, code int, desc interface{}, remoteAddr string) {

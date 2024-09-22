@@ -49,9 +49,14 @@ func (r *authRepository) ReadUser(email string) (result *auth.User, err error) {
 	var user auth.User
 	err = row.Scan(&user.ID, &user.Email, &user.FirstName, &user.MiddleName, &user.LastName, &user.Address, &user.Gender, &user.MaritalStatus, &user.HashedPassword, &user.CreatedAt)
 	if err != nil {
-		errMsg := fmt.Errorf("database error")
-		log.Printf("ReadUser() %v, err: %v\n", errMsg, err)
-		return nil, errMsg
+		log.Printf("ReadUser(), err: %v\n", err)
+		return nil, err
+	}
+
+	if user.MiddleName != "" {
+		user.Fullname = user.FirstName + " " + user.MiddleName + " " + user.LastName
+	} else {
+		user.Fullname = user.FirstName + " " + user.LastName
 	}
 
 	return &user, nil

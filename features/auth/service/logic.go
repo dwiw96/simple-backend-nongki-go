@@ -1,7 +1,12 @@
 package service
 
 import (
+	"errors"
 	"fmt"
+	"log"
+
+	"github.com/jackc/pgx/v5"
+
 	auth "simple-backend-nongki-go/features/auth"
 	middleware "simple-backend-nongki-go/middleware"
 	password "simple-backend-nongki-go/utils/password"
@@ -47,12 +52,20 @@ func (s *authService) SignUp(input auth.SignupRequest) (user *auth.User, code in
 func (s *authService) SignIn(input auth.SigninRequest) (user *auth.User, token string, code int, err error) {
 	user, err = s.repo.ReadUser(input.Email)
 	if err != nil {
-		return nil, "", 400, err
+		errMsg := fmt.Errorf("database error")
+		code = 500
+		if errors.Is(err, pgx.ErrNoRows) {
+			errMsg = errors.New("no user found with this email")
+			code = 401
+		}
+		return nil, "", code, errMsg
 	}
 
 	err = password.VerifyHashPassword(input.Password, user.HashedPassword)
 	if err != nil {
-		return nil, "", 400, err
+		errMsg := errors.New("password is wrong")
+		log.Println("VerifyHashPassword(), err:", err)
+		return nil, "", 401, errMsg
 	}
 
 	key, err := s.repo.LoadKey()
@@ -60,7 +73,11 @@ func (s *authService) SignIn(input auth.SigninRequest) (user *auth.User, token s
 		return nil, "", 500, fmt.Errorf("load key error: %w", err)
 	}
 
-	token = middleware.GetSignedToken(*user, key)
+	token, err = middleware.GetToken(*user, key)
+	if err != nil {
+		errMsg := errors.New("failed generate authentication token")
+		return nil, "", 500, errMsg
+	}
 
 	return user, token, 200, nil
 }

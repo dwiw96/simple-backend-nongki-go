@@ -98,5 +98,5 @@ func (d *authDelivery) LogIn(w http.ResponseWriter, r *http.Request, _ httproute
 	w.Header().Set("Authorization", token)
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(200)
-	json.NewEncoder(w).Encode(responses.SuccessWithDataResponse(response, 200, "LogIn success"))
+	json.NewEncoder(w).Encode(responses.SuccessWithDataResponse(response, 200, "Login success"))
 }
