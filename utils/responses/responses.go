@@ -13,28 +13,27 @@ var errorMsg = map[int]string{
 	500: "Internal Server Error",
 }
 
-func ErrorJSON(w http.ResponseWriter, code int, desc, remoteAddr string) {
+func ErrorJSON(w http.ResponseWriter, code int, desc interface{}, remoteAddr string) {
 	msg := errorMsg[code]
 	log.Printf(">>> response: %d, %s, %s - %s\n", code, msg, desc, remoteAddr)
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
 	response := FailedResponse(msg, desc)
 	json.NewEncoder(w).Encode(response)
 }
 
-func FailedResponse(msg, desc string) map[string]interface{} {
+func FailedResponse(msg, desc interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"error_message": msg,
 		"result":        "failure",
-		"value":         "",
 		"description":   desc,
 		"execute_at":    time.Now().UTC().Add(time.Hour * 9).Format("2006/01/02 15:04:05.000"),
 	}
 }
 
-func SuccessWithDataResponse(data interface{}, msg string) map[string]interface{} {
-	log.Printf(">>> response: %s, %d\n", msg, http.StatusOK)
+func SuccessWithDataResponse(data interface{}, code int, msg string) map[string]interface{} {
+	log.Printf(">>> %d, response: %s\n", code, msg)
 	return map[string]interface{}{
 		"error_message": "",
 		"result":        "success",
