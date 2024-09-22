@@ -17,5 +17,6 @@ func SetupRouter() *httprouter.Router {
 }
 
 func StartServer(port string, router *httprouter.Router) {
+	log.Println("start server at localhost", port)
 	log.Fatal(http.ListenAndServe(port, router))
 }
