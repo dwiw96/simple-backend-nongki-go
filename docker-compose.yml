@@ -1,0 +1,13 @@
+services:
+  postgres:
+    container_name: pg_nongki_container
+    image: postgres
+    ports:
+      - "5432:5432"
+    # volumes:
+    #   - ~/apps/postgres:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=dwiw
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=nongki_db
+    restart: always
