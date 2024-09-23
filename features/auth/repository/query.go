@@ -86,6 +86,12 @@ func (r *authRepository) InsertUser(input auth.SignupRequest) (result *auth.User
 		return nil, errMsg
 	}
 
+	if user.MiddleName != "" {
+		user.Fullname = user.FirstName + " " + user.MiddleName + " " + user.LastName
+	} else {
+		user.Fullname = user.FirstName + " " + user.LastName
+	}
+
 	return &user, nil
 }
 
