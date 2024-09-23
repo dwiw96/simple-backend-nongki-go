@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -58,6 +59,36 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func createUser(t *testing.T) (user *auth.User, signupReq auth.SignupRequest) {
+	email := generator.CreateRandomEmail(generator.CreateRandomString(5))
+
+	input := auth.SignupRequest{
+		FirstName:      generator.CreateRandomString(5),
+		LastName:       generator.CreateRandomString(7),
+		Email:          email,
+		Address:        generator.CreateRandomString(20),
+		Gender:         generator.CreateRandomGender(),
+		MaritalStatus:  generator.CreateRandomMaritalStatus(),
+		HashedPassword: generator.CreateRandomString(10),
+	}
+
+	res, code, err := serviceTest.SignUp(input)
+
+	t.Log("res id:", res.ID)
+	require.NoError(t, err)
+	require.Zero(t, code)
+	assert.Equal(t, input.FirstName, res.FirstName)
+	assert.Equal(t, "", res.MiddleName)
+	assert.Equal(t, input.LastName, res.LastName)
+	assert.Equal(t, input.Email, res.Email)
+	assert.Equal(t, input.Address, res.Address)
+	assert.Equal(t, input.Gender, res.Gender)
+	assert.Equal(t, input.MaritalStatus, res.MaritalStatus)
+	assert.NotEqual(t, input.HashedPassword, res.HashedPassword)
+
+	return res, input
+}
+
 func TestSignUp(t *testing.T) {
 	email := generator.CreateRandomEmail(generator.CreateRandomString(5))
 	tests := []struct {
@@ -74,7 +105,7 @@ func TestSignUp(t *testing.T) {
 				Address:        generator.CreateRandomString(20),
 				Gender:         generator.CreateRandomGender(),
 				MaritalStatus:  generator.CreateRandomMaritalStatus(),
-				HashedPassword: generator.CreateRandomString(60),
+				HashedPassword: generator.CreateRandomString(10),
 			},
 			err: false,
 		}, {
@@ -85,7 +116,7 @@ func TestSignUp(t *testing.T) {
 				Address:        generator.CreateRandomString(20),
 				Gender:         generator.CreateRandomGender(),
 				MaritalStatus:  generator.CreateRandomMaritalStatus(),
-				HashedPassword: generator.CreateRandomString(60),
+				HashedPassword: generator.CreateRandomString(10),
 			},
 			err: true,
 		}, {
@@ -97,7 +128,7 @@ func TestSignUp(t *testing.T) {
 				Address:        "",
 				Gender:         generator.CreateRandomGender(),
 				MaritalStatus:  generator.CreateRandomMaritalStatus(),
-				HashedPassword: generator.CreateRandomString(60),
+				HashedPassword: generator.CreateRandomString(10),
 			},
 			err: true,
 		}, {
@@ -109,7 +140,7 @@ func TestSignUp(t *testing.T) {
 				Address:        generator.CreateRandomString(20),
 				Gender:         generator.CreateRandomGender(),
 				MaritalStatus:  generator.CreateRandomMaritalStatus(),
-				HashedPassword: generator.CreateRandomString(60),
+				HashedPassword: generator.CreateRandomString(10),
 			},
 			err: true,
 		},
@@ -118,9 +149,7 @@ func TestSignUp(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			res, code, err := serviceTest.SignUp(test.input)
-			t.Log("email:", test.input.Email)
-			t.Log("first name:", test.input.FirstName)
-			t.Log("address:", test.input.Address)
+
 			if !test.err {
 				t.Log("res id:", res.ID)
 				require.NoError(t, err)
@@ -132,13 +161,71 @@ func TestSignUp(t *testing.T) {
 				assert.Equal(t, test.input.Address, res.Address)
 				assert.Equal(t, test.input.Gender, res.Gender)
 				assert.Equal(t, test.input.MaritalStatus, res.MaritalStatus)
-				assert.Equal(t, test.input.HashedPassword, res.HashedPassword)
+				assert.NotEqual(t, test.input.HashedPassword, res.HashedPassword)
 			} else {
 				require.Error(t, err)
 				require.NotZero(t, code)
 			}
-			if err == nil {
-				t.Log("res id:", res.ID)
+		})
+	}
+}
+
+func TestLogIn(t *testing.T) {
+	user, signUpReq := createUser(t)
+
+	tests := []struct {
+		name  string
+		input auth.LoginRequest
+		err   bool
+		code  int
+	}{
+		{
+			name: "success",
+			input: auth.LoginRequest{
+				Email:    signUpReq.Email,
+				Password: signUpReq.HashedPassword,
+			},
+			err:  false,
+			code: 1,
+		}, {
+			name: "error_email_wrong",
+			input: auth.LoginRequest{
+				Email:    "err" + signUpReq.Email,
+				Password: signUpReq.HashedPassword,
+			},
+			err:  true,
+			code: 2,
+		}, {
+			name: "success_password_wrong",
+			input: auth.LoginRequest{
+				Email:    signUpReq.Email,
+				Password: "err" + signUpReq.HashedPassword,
+			},
+			err:  true,
+			code: 3,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			res, token, code, err := serviceTest.LogIn(test.input)
+			if !test.err {
+				require.NoError(t, err)
+				assert.NotEmpty(t, token)
+				assert.Equal(t, 200, code)
+				user.Fullname = res.Fullname
+				assert.Equal(t, user, res)
+			} else {
+				require.Error(t, err)
+				assert.Empty(t, token)
+				assert.Equal(t, 401, code)
+				assert.Nil(t, res)
+			}
+
+			if test.code == 2 {
+				assert.Equal(t, err, errors.New("no user found with this email"))
+			} else if test.code == 3 {
+				assert.Equal(t, err, errors.New("password is wrong"))
 			}
 		})
 	}
