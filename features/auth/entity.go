@@ -33,7 +33,7 @@ type User struct {
 	CreatedAt      time.Time
 }
 
-type SigninRequest struct {
+type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
@@ -59,7 +59,7 @@ type RepositoryInterface interface {
 
 type ServiceInterface interface {
 	SignUp(input SignupRequest) (user *User, code int, err error)
-	SignIn(input SigninRequest) (user *User, token string, code int, err error)
+	LogIn(input LoginRequest) (user *User, token string, code int, err error)
 	LogOut(payload JwtPayload) error
 }
 

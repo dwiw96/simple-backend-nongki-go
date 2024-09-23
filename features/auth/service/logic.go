@@ -51,7 +51,7 @@ func (s *authService) SignUp(input auth.SignupRequest) (user *auth.User, code in
 	return user, 0, nil
 }
 
-func (s *authService) SignIn(input auth.SigninRequest) (user *auth.User, token string, code int, err error) {
+func (s *authService) LogIn(input auth.LoginRequest) (user *auth.User, token string, code int, err error) {
 	user, err = s.repo.ReadUser(input.Email)
 	if err != nil {
 		errMsg := fmt.Errorf("database error")
