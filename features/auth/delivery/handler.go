@@ -93,7 +93,14 @@ func (d *authDelivery) LogIn(w http.ResponseWriter, r *http.Request, _ httproute
 		return
 	}
 
-	user, token, code, err := d.service.SignIn(auth.SigninRequest(request))
+	err = d.validate.Struct(request)
+	if err != nil {
+		errTranslated := translateError(d.trans, err)
+		responses.ErrorJSON(w, 422, errTranslated, r.RemoteAddr)
+		return
+	}
+
+	user, token, code, err := d.service.LogIn(auth.LoginRequest(request))
 	if err != nil {
 		responses.ErrorJSON(w, code, err.Error(), r.RemoteAddr)
 		return
