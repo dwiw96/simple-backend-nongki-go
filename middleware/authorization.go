@@ -47,7 +47,7 @@ func AuthMiddleware(ctx context.Context, pool *pgxpool.Pool, client *redis.Clien
 		authHeader, err := GetTokenHeader(r)
 		if err != nil {
 			log.Println(err)
-			response.ErrorJSON(w, 500, err.Error(), r.RemoteAddr)
+			response.ErrorJSON(w, 401, err.Error(), r.RemoteAddr)
 			return
 		}
 
