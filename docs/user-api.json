@@ -50,7 +50,7 @@
                                 ]
                             },
                             "examples": {
-                                "john doe":{
+                                "success":{
                                     "description": "Sign up user john doe",
                                     "value":{
                                         "email": "doe@mail.com",
@@ -237,6 +237,15 @@
                                         "type": "string"
                                     }
                                 }
+                            },
+                            "examples": {
+                                "success": {
+                                    "description": "correct login parameter",
+                                    "value":{
+                                        "email": "doe@mail.com",
+                                        "password": "secret111"
+                                    }
+                                }
                             }
                         }
                     }
@@ -244,24 +253,38 @@
                 "responses": {
                     "200":{
                         "description": "Success login",
+                        "headers": {
+                            "Authorization":{
+                                "description": "bearer token",
+                                "schema":{
+                                    "type": "string"
+                                }
+                            }
+                        },
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "data": {
+                                        "description": {
+                                            "type": "string"
+                                        },
+                                        "error_message": {
+                                            "type": "string"
+                                        },
+                                        "execute_at": {
+                                            "type": "string"
+                                        },
+                                        "result": {
+                                            "type": "string"
+                                        },
+                                        "value": {
                                             "type": "object",
                                             "properties": {
+                                                "fullname":{
+                                                    "type": "string"
+                                                },
                                                 "email":{
-                                                    "type": "string"
-                                                },
-                                                "first_name":{
-                                                    "type": "string"
-                                                },
-                                                "middle_name":{
-                                                    "type": "string"
-                                                },
-                                                "last_name":{
                                                     "type": "string"
                                                 },
                                                 "address":{
@@ -272,30 +295,118 @@
                                                 },
                                                 "married_status":{
                                                     "type": "string"
-                                                },
-                                                "token":{
-                                                    "type": "string"
                                                 }
                                             }
-                                        },
-                                        "erros": {}
+                                        }
                                     }
                                 },
                                 "examples": {
                                     "success": {
                                         "description": "Success login",
                                         "value": {
-                                            "data": {
-                                                    "email": "johndoe@mail.com",
-                                                    "first_name": "john",
-                                                    "middle_name": "",
-                                                    "last_name": "doe",
-                                                    "address": "Gegerkalong, Kota Bandung",
-                                                    "gender": "male",
-                                                    "married_status": "single",
-                                                    "token": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1dWlkIjoiOWQ0MjlmNDktYjY5OC00ODZlLTk5NjAtNGQ4MzQ1NDZlZjI1IiwiZW1haWwiOiJteS5iYWNrZW5kLnRlc3RpbmcxMTAwQGdtYWlsLmNvbSIsImlhdCI6IjIwMjQtMDUtMjlUMDQ6NTQ6NDYuMzk1MjU4NzQyWiIsImV4cCI6IjIwMjQtMDYtMDVUMDQ6NTQ6NDYuMzk1MjU4NzQyWiJ9.RoEms5EgCZNuYcedWMJyH-e9u24XHYunIPAnm4p8gGnBSNaK1dzeK7xWLrCsGSoULwJY2IXTNdObOLEt179pYyYdDaRRlVnUk1d1N-54qqcErZ_-6UuRB9zVau21QNbajB8Uu2eORqd5aUgY6ECDUzcQzrF-ZjkbRUEb3BmMU516o6UbO2N4eVlcDwB3mIxZe6nRleY7pKsGcVqJWyPnZ83z-JuqcV03CRLME43pEj686oEOA48t1N3cDCSVMRKWk7z8hTw9GwWLmhvEEHOgd8D__7hB-Vo9mWF88lajf3DeXQ4kFbDxgHVRv-NLQhQhr7n1e6r8C7HSMemeFnKu3w=="
+                                            "description": "Login success",
+                                            "error_message": "",
+                                            "execute_at": "2024/09/23 16:49:26.806",
+                                            "result": "success",
+                                            "value": {
+                                                "fullname": "John Doe",
+                                                "email": "doe@mail.com",
+                                                "address": "Circle Street, No.1, Bandung, West Java",
+                                                "gender": "male",
+                                                "marital_status": "single"
                                             }
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema":{
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "description": {
+                                                    "type": "string"
+                                                },
+                                                "error_message": {
+                                                    "type": "string"
+                                                },
+                                                "execute_at": {
+                                                    "type": "string"
+                                                },
+                                                "result": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }, 
+                                "examples": {
+                                    "wrong password": {
+                                            "description": "wrong password",
+                                            "value": {
+                                                    "description": "your password is wrong",
+                                                    "error_message": "Unauthorized",
+                                                    "execute_at": "2024/09/22 19:44:11.778",
+                                                    "result": "failure"
+                                            }
+                                    },
+                                    "wrong email": {
+                                            "description": "wrong email",
+                                            "value": {
+                                                    "description": "no user found with this email",
+                                                    "error_message": "Unauthorized",
+                                                    "execute_at": "2024/09/22 19:44:11.778",
+                                                    "result": "failure"
+                                            }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "content": {
+                            "application/json": {
+                                "schema":{
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "description": {
+                                                    "type": "array"
+                                                },
+                                                "error_message": {
+                                                    "type": "string"
+                                                },
+                                                "execute_at": {
+                                                    "type": "string"
+                                                },
+                                                "result": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }, 
+                                "examples": {
+                                    "validationerror": {
+                                            "description": "Validation error",
+                                            "value": {
+                                                    "description": [
+                                                        "Email must be a valid email address"
+                                                    ],
+                                                    "error_message": "Unprocessable Entity",
+                                                    "execute_at": "2024/09/22 19:44:11.778",
+                                                    "result": "failure"
+                                            }
                                     }
                                 }
                             }
@@ -305,8 +416,13 @@
             }
         },
         "/api/logout": {
-            "delete": {
+            "post": {
                 "description": "Logout user",
+                "security": [
+                    {
+                        "bearerAuth":[]
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "Authorization",
@@ -323,13 +439,73 @@
                                 },
                                 "examples": {
                                    "success":{
-                                    "value": "success"
+                                    "value": "logout success"
                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401":{
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema":{
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "description": {
+                                                    "type": "string"
+                                                },
+                                                "error_message": {
+                                                    "type": "string"
+                                                },
+                                                "execute_at": {
+                                                    "type": "string"
+                                                },
+                                                "result": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "examples": {
+                                    "Unauthorized":{
+                                        "value": {
+                                        "description": "token is blacklist",
+                                        "error_message": "Unauthorized",
+                                        "execute_at": "2024/09/22 19:44:11.778",
+                                        "result": "failure"
+                                        }
+                                    },
+                                    "empty auth header": {
+                                        "description": "empty auth header",
+                                        "value": {
+                                                "description": [
+                                                    "no authorization header found"
+                                                ],
+                                                "error_message": "Unprocessable Entity",
+                                                "execute_at": "2024/09/22 19:44:11.778",
+                                                "result": "failure"
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+    },
+
+    "components": {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
             }
         }
     }
