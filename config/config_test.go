@@ -9,13 +9,14 @@ import (
 
 func TestGetEnvConfig(t *testing.T) {
 	ans := &EnvConfig{
-		SERVER_PORT:   ":8080",
-		DB_USERNAME:   "dwiw",
-		DB_PASSWORD:   "secret",
-		DB_HOST:       "localhost",
-		DB_PORT:       "5432",
-		DB_NAME:       "nongki_db",
-		ABSOLUTE_PATH: "/home/dwiw22/jobs-test-interview/test-job/toonesia/simple-backend-nongki-go",
+		SERVER_PORT:    ":8080",
+		DB_USERNAME:    "dwiw",
+		DB_PASSWORD:    "secret",
+		DB_HOST:        "localhost",
+		DB_PORT:        "5432",
+		DB_NAME:        "nongki_db",
+		REDIS_HOST:     "localhost:6379",
+		REDIS_PASSWORD: "",
 	}
 	res := GetEnvConfig()
 	require.NotNil(t, res)

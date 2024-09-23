@@ -13,12 +13,14 @@ import (
 )
 
 type authService struct {
-	repo auth.RepositoryInterface
+	repo  auth.RepositoryInterface
+	cache auth.CacheInterface
 }
 
-func NewAuthService(repo auth.RepositoryInterface) auth.ServiceInterface {
+func NewAuthService(repo auth.RepositoryInterface, cache auth.CacheInterface) auth.ServiceInterface {
 	return &authService{
-		repo: repo,
+		repo:  repo,
+		cache: cache,
 	}
 }
 
@@ -73,11 +75,15 @@ func (s *authService) SignIn(input auth.SigninRequest) (user *auth.User, token s
 		return nil, "", 500, fmt.Errorf("load key error: %w", err)
 	}
 
-	token, err = middleware.GetToken(*user, key)
+	token, err = middleware.CreateToken(*user, key)
 	if err != nil {
 		errMsg := errors.New("failed generate authentication token")
 		return nil, "", 500, errMsg
 	}
 
 	return user, token, 200, nil
+}
+
+func (s *authService) LogOut(payload auth.JwtPayload) error {
+	return s.cache.CachingBlockedToken(payload)
 }

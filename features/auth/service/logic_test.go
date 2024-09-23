@@ -8,15 +8,23 @@ import (
 
 	cfg "simple-backend-nongki-go/config"
 	auth "simple-backend-nongki-go/features/auth"
+	cache "simple-backend-nongki-go/features/auth/cache"
 	repo "simple-backend-nongki-go/features/auth/repository"
+	middleware "simple-backend-nongki-go/middleware"
 	pg "simple-backend-nongki-go/utils/driver/postgresql"
+	rd "simple-backend-nongki-go/utils/driver/redis"
 	generator "simple-backend-nongki-go/utils/generator"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-var serviceTest auth.ServiceInterface
+var (
+	serviceTest auth.ServiceInterface
+	pool        *pgxpool.Pool
+	ctx         context.Context
+)
 
 func TestMain(m *testing.M) {
 	os.Setenv("DB_USERNAME", "dwiw")
@@ -33,14 +41,19 @@ func TestMain(m *testing.M) {
 		DB_NAME:     os.Getenv("DB_NAME"),
 	}
 
-	pool := pg.ConnectToPg(envConfig)
+	pool = pg.ConnectToPg(envConfig)
+	defer pool.Close()
+
+	client := rd.ConnectToRedis(envConfig)
+	defer client.Close()
 
 	var cancel context.CancelFunc
-	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1000*time.Second)
 	defer cancel()
 
 	repoTest := repo.NewAuthRepository(pool, ctx)
-	serviceTest = NewAuthService(repoTest)
+	cacheTest := cache.NewAuthCache(client, ctx)
+	serviceTest = NewAuthService(repoTest, cacheTest)
 
 	os.Exit(m.Run())
 }
@@ -129,4 +142,29 @@ func TestSignUp(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLogOut(t *testing.T) {
+	key, err := middleware.LoadKey(ctx, pool)
+	require.NoError(t, err)
+	require.NotNil(t, key)
+
+	user := auth.User{
+		ID:            int64(generator.RandomInt(1, 100)),
+		Fullname:      generator.CreateRandomString(5) + " " + generator.CreateRandomString(7),
+		Email:         generator.CreateRandomEmail(generator.CreateRandomString(5)),
+		Address:       generator.CreateRandomString(20),
+		Gender:        generator.CreateRandomGender(),
+		MaritalStatus: generator.CreateRandomMaritalStatus(),
+	}
+	token, err := middleware.CreateToken(user, key)
+	require.NoError(t, err)
+	require.NotZero(t, len(token))
+	t.Log("TOKEN:", token)
+
+	payload, err := middleware.ReadToken(token, key)
+	require.NoError(t, err)
+
+	err = serviceTest.LogOut(*payload)
+	require.NoError(t, err)
 }

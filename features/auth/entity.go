@@ -3,6 +3,9 @@ package auth
 import (
 	"crypto/rsa"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 type SignupRequest struct {
@@ -35,19 +38,16 @@ type SigninRequest struct {
 	Password string `json:"password"`
 }
 
-type JwtHeader struct {
-	Alg string `json:"alg"`
-	Typ string `json:"typ"`
-}
-
 type JwtPayload struct {
-	UserID  int64     `json:"usi"`
+	jwt.RegisteredClaims
+	ID      uuid.UUID `json:"id"`
+	UserID  int64     `json:"user_id"`
 	Iss     string    `json:"iss"`
-	Name    string    `json:"nam"`
-	Email   string    `json:"eml"`
-	Address string    `json:"adr,omitempty"`
-	Iat     time.Time `json:"iat"`
-	Exp     time.Time `json:"exp"`
+	Name    string    `json:"name"`
+	Email   string    `json:"email"`
+	Address string    `json:"address,omitempty"`
+	Iat     int64     `json:"iat"`
+	Exp     int64     `json:"exp"`
 }
 
 type RepositoryInterface interface {
@@ -60,4 +60,9 @@ type RepositoryInterface interface {
 type ServiceInterface interface {
 	SignUp(input SignupRequest) (user *User, code int, err error)
 	SignIn(input SigninRequest) (user *User, token string, code int, err error)
+	LogOut(payload JwtPayload) error
+}
+
+type CacheInterface interface {
+	CachingBlockedToken(payload JwtPayload) error
 }

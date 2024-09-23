@@ -2,49 +2,128 @@ package middleware
 
 import (
 	"context"
-	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
-	// "net/http"
-
 	auth "simple-backend-nongki-go/features/auth"
-	// "github.com/julienschmidt/httprouter"
+	response "simple-backend-nongki-go/utils/responses"
+
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/julienschmidt/httprouter"
+	"github.com/redis/go-redis/v9"
 )
 
-func GetToken(reqData auth.User, key *rsa.PrivateKey) (token string, err error) {
+type ContextKey string
+
+var PayloadKey ContextKey = "payload"
+
+func AuthMiddleware(ctx context.Context, pool *pgxpool.Pool, client *redis.Client, next httprouter.Handle) httprouter.Handle {
+	return (func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+		if r.RequestURI == "/api/signin" {
+			next(w, r, ps)
+			return
+		}
+		if r.RequestURI == "/api/login" {
+			next(w, r, ps)
+			return
+		}
+
+		key, err := LoadKey(ctx, pool)
+		if err != nil {
+			log.Println(err)
+			response.ErrorJSON(w, 500, err.Error(), r.RemoteAddr)
+			return
+		}
+
+		authHeader, err := GetTokenHeader(r)
+		if err != nil {
+			log.Println(err)
+			response.ErrorJSON(w, 500, err.Error(), r.RemoteAddr)
+			return
+		}
+
+		isVerified, err := VerifyToken(authHeader, key)
+		if err != nil {
+			response.ErrorJSON(w, 401, err.Error(), r.RemoteAddr)
+			return
+		}
+		if !isVerified {
+			response.ErrorJSON(w, 401, "token is not valid", r.RemoteAddr)
+			return
+		}
+
+		payload, err := ReadToken(authHeader, key)
+		if err != nil {
+			response.ErrorJSON(w, 401, err.Error(), r.RemoteAddr)
+			return
+		}
+
+		err = CheckBlockedToken(client, ctx, payload.ID, payload.UserID)
+		if err != nil {
+			response.ErrorJSON(w, 401, err.Error(), r.RemoteAddr)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), PayloadKey, payload)
+		r = r.WithContext(ctx)
+
+		w.Header().Set("Access-Control-Expose-Headers", "Authorization,Access-Control-Allow-Origin,Access-Control-Allow-Credentials,Access-Control-Allow-Methods,Access-Control-Allow-Headers")
+		next(w, r, ps)
+	})
+}
+
+func GetTokenHeader(r *http.Request) (token string, err error) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("no authorization header found")
+	}
+
+	tokenString := strings.Replace(authHeader, "Bearer ", "", 1)
+	return tokenString, nil
+}
+
+func CreateToken(reqData auth.User, key *rsa.PrivateKey) (token string, err error) {
 	nowTime := time.Now().UTC()
-	expTime := nowTime.Add(time.Hour * 1)
+	expTime := nowTime.Add(time.Minute * 60)
+
+	id, err := uuid.NewRandom()
+	if err != nil {
+		errMsg := errors.New("failed to generate uuid")
+		log.Println("GetToken(), uuid:", err)
+		return "", errMsg
+	}
 
 	t := jwt.NewWithClaims(jwt.SigningMethodRS256,
-		jwt.MapClaims{
-			"iss":     "nongki",
-			"userID":  reqData.ID,
-			"name":    reqData.Fullname,
-			"email":   reqData.Email,
-			"address": reqData.Address,
-			"iat":     nowTime.Unix(),
-			"exp":     expTime.Unix(),
+		auth.JwtPayload{
+			ID:      id,
+			UserID:  reqData.ID,
+			Name:    reqData.Fullname,
+			Email:   reqData.Email,
+			Address: reqData.Address,
+			Iat:     nowTime.Unix(),
+			Exp:     expTime.Unix(),
 		})
 
 	token, err = t.SignedString(key)
 
+	token = "Bearer " + token
+
 	return
 }
 
-func VerifyToken(userToken string, key *rsa.PrivateKey) (bool, error) {
-	jwtToken, err := jwt.Parse(userToken, func(jwtToken *jwt.Token) (interface{}, error) {
+func VerifyToken(authHeader string, key *rsa.PrivateKey) (bool, error) {
+	userToken := strings.Split(authHeader, " ")
+
+	jwtToken, err := jwt.Parse(userToken[1], func(jwtToken *jwt.Token) (interface{}, error) {
 		if _, ok := jwtToken.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", jwtToken.Header["alg"])
 		}
@@ -53,23 +132,42 @@ func VerifyToken(userToken string, key *rsa.PrivateKey) (bool, error) {
 	})
 
 	if err != nil {
-		log.Println("err:", err)
-		return false, err
+		log.Println("VerifyToken(), err:", err)
+		return false, errors.New("token is invalid")
 	}
 
-	if claims, ok := jwtToken.Claims.(jwt.MapClaims); ok {
-		if claims["iss"] != "nongki" {
-			errMsg := fmt.Errorf("claim iss is wrong")
-			log.Println(errMsg)
-			return false, errMsg
-		}
-	} else {
-		errMsg := fmt.Errorf("iss payload not found")
-		log.Println(errMsg)
+	_, ok := jwtToken.Claims.(jwt.MapClaims)
+
+	if !ok || !jwtToken.Valid {
+		errMsg := errors.New("token is not valid")
 		return false, errMsg
 	}
 
 	return true, nil
+}
+
+func ReadToken(authHeader string, key *rsa.PrivateKey) (*auth.JwtPayload, error) {
+	var payload auth.JwtPayload
+	userToken := strings.Split(authHeader, " ")
+
+	jwtToken, err := jwt.ParseWithClaims(userToken[1], &payload, func(jwtToken *jwt.Token) (interface{}, error) {
+		if _, ok := jwtToken.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", jwtToken.Header["alg"])
+		}
+
+		return &key.PublicKey, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !jwtToken.Valid {
+		errMsg := errors.New("read invalid token")
+		return nil, errMsg
+	}
+
+	return &payload, err
 }
 
 type KeyCache struct {
@@ -82,41 +180,6 @@ var keyCache = &KeyCache{
 	key:        nil,
 	expiration: time.Now(),
 }
-
-// func TokenMiddleware(db *sql.DB, next httprouter.Handle) httprouter.Handle {
-// 	return (func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-// 		if r.RequestURI == "/api/signin" {
-// 			next(w, r, ps)
-// 			return
-// 		}
-
-// 		key, err := LoadKey(db)
-// 		if err != nil {
-// 			log.Println(err)
-// 			return err
-// 		}
-
-// 		tokenString, err := GetTokenHeader(c)
-// 		if err != nil {
-// 			log.Println(err)
-// 			return err
-// 		}
-
-// 		legitimate := Verify(tokenString, key)
-// 		if !legitimate {
-// 			log.Println("token illegitimate")
-// 			return errors.New("wrong token")
-// 		}
-
-// 		tokenData := ReadToken(tokenString)
-
-// 		newToken := GetUpdatedToken(tokenData, key)
-
-// 		w.Header().Set("Access-Control-Expose-Headers", "Authorization,Access-Control-Allow-Origin,Access-Control-Allow-Credentials,Access-Control-Allow-Methods,Access-Control-Allow-Headers")
-// 		w.Header().Set("Authorization", newToken)
-// 		next(w, r, ps)
-// 	})
-// }
 
 func LoadKey(ctx context.Context, conn *pgxpool.Pool) (key *rsa.PrivateKey, err error) {
 	if keyCache.key != nil && time.Now().Before(keyCache.expiration) {
@@ -138,7 +201,6 @@ func LoadKey(ctx context.Context, conn *pgxpool.Pool) (key *rsa.PrivateKey, err 
 			log.Println(err)
 			return nil, err
 		}
-		log.Println("Load success")
 
 		privateKey, err := x509.ParsePKCS1PrivateKey(keyBytes)
 		if err != nil {
@@ -157,63 +219,14 @@ func LoadKey(ctx context.Context, conn *pgxpool.Pool) (key *rsa.PrivateKey, err 
 	return nil, errors.New("no private key found in database")
 }
 
-// func GetTokenHeader(c echo.Context) (token string, err error) {
-// 	authHeader := c.Request().Header.Get("Authorization")
-// 	if authHeader == "" {
-// 		return "", errors.New("no authorization header found")
-// 	}
-
-// 	tokenString := strings.Replace(authHeader, "Bearer ", "", 1)
-// 	return tokenString, nil
-// }
-
-// func CheckAuthorization(c echo.Context, key *rsa.PrivateKey) (tokenData auth.JwtPayload, newTokenString string, err error) {
-// 	tokenString, err := GetTokenHeader(c)
-// 	if err != nil {
-// 		return auth.JwtPayload{}, "", err
-// 	}
-
-// 	legitimate := Verify(tokenString, key)
-// 	if !legitimate {
-// 		return auth.JwtPayload{}, "", errors.New("wrong token")
-// 	}
-
-// 	tokenData = ReadToken(tokenString)
-
-// 	if time.Now().UTC().Add(time.Hour * 9).After(tokenData.Exp.Add(time.Minute * 5)) {
-// 		return auth.JwtPayload{}, "", errors.New("expired token")
-// 	}
-
-// 	if tokenData.Exp.Before(time.Now().UTC().Add(time.Hour * 9)) {
-// 		newToken := GetUpdatedToken(tokenData, key)
-
-// 		return tokenData, newToken, nil
-// 	}
-
-// 	return tokenData, "", nil
-// }
-
-func GetUpdatedToken(payload auth.JwtPayload, key *rsa.PrivateKey) string {
-	privateKey := key
-	header := auth.JwtHeader{Alg: "RS256", Typ: "JWT"}
-	nowTime := time.Now().UTC()
-	payload.Exp = nowTime.Add(time.Minute * 60)
-	headerBytes, err := json.Marshal(header)
-	payloadBytes, err := json.Marshal(payload)
-	encodedHeader := base64.URLEncoding.EncodeToString(headerBytes)
-	encodedPayload := base64.URLEncoding.EncodeToString(payloadBytes)
-	headPay := encodedHeader + "." + encodedPayload
-	msgHash := sha256.New()
-	_, err = msgHash.Write([]byte(headPay))
+func CheckBlockedToken(redis *redis.Client, ctx context.Context, tokenID uuid.UUID, userID int64) error {
+	check, err := redis.Exists(ctx, tokenID.String()).Result()
 	if err != nil {
-		panic(err)
+		return err
 	}
-	msgHashSum := msgHash.Sum(nil)
-	signature, err := rsa.SignPSS(rand.Reader, privateKey, crypto.SHA256, msgHashSum, nil)
-	if err != nil {
-		panic(err)
+	if check != 0 {
+		return errors.New("token is blacklist")
 	}
-	encodedSignature := base64.URLEncoding.EncodeToString(signature)
-	token := "Bearer " + headPay + "." + encodedSignature
-	return token
+
+	return nil
 }

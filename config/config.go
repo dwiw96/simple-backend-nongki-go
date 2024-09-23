@@ -10,13 +10,14 @@ import (
 )
 
 type EnvConfig struct {
-	SERVER_PORT   string
-	DB_USERNAME   string
-	DB_PASSWORD   string
-	DB_HOST       string
-	DB_PORT       string
-	DB_NAME       string
-	ABSOLUTE_PATH string
+	SERVER_PORT    string
+	DB_USERNAME    string
+	DB_PASSWORD    string
+	DB_HOST        string
+	DB_PORT        string
+	DB_NAME        string
+	REDIS_HOST     string
+	REDIS_PASSWORD string
 }
 
 func GetEnvConfig() *EnvConfig {
@@ -31,7 +32,8 @@ func GetEnvConfig() *EnvConfig {
 	resEnvConfig.DB_HOST = os.Getenv("DB_HOST")
 	resEnvConfig.DB_PORT = os.Getenv("DB_PORT")
 	resEnvConfig.DB_NAME = os.Getenv("DB_NAME")
-	resEnvConfig.ABSOLUTE_PATH = os.Getenv("ABSOLUTE_PATH")
+	resEnvConfig.REDIS_HOST = os.Getenv("REDIS_HOST")
+	resEnvConfig.REDIS_PASSWORD = os.Getenv("REDIS_PASSWORD")
 
 	log.Println("-> getEnvConfig()")
 	return &resEnvConfig
